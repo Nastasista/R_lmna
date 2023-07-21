@@ -1,6 +1,6 @@
 ---
 title: "Edger_pr"
-author: "Анастасия_Полузёрова"
+author: "Anastasia_Poluzerova"
 date: "2023-05-10"
 output:
   word_document: default
