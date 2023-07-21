@@ -1,0 +1,265 @@
+---
+title: "sc-RNA-seq"
+author: "Анастасия_Полузёрова"
+date: "2023-04-24"
+output:
+  html_document:
+    df_print: paged
+---
+
+
+```{R, include = FALSE}
+require("knitr")
+opts_knit$set(include = FALSE)
+opts_knit$set(highlight = TRUE)
+opts_knit$set(root.dir = "/home/nastasista/Desktop/RNAseq/sc_RNA")                      
+```
+
+```{R, include = FALSE}
+
+library(Seurat)
+library(dplyr)
+library(ggplot2)
+library(celldex)
+library(SingleR)
+```
+
+```{R}
+
+pbmc.data <- Read10X(data.dir = "/home/nastasista/Desktop/RNAseq/sc_RNA/t")
+pbmc <- CreateSeuratObject(counts = pbmc.data, project = "pbmc3k", min.cells = 3, min.features = 200)
+pbmc
+rm(pbmc.data) 
+```
+
+```{R}
+# QC
+meta <- pbmc@meta.data
+dim(meta)
+head(meta)
+```
+<span style="color: blue;"> <i>Объект Seurat(PBMC) содержит 19420 генов и 7903 клетки (features) <i> </span>
+```{r}
+summary(meta$nCount_RNA)
+summary(meta$nFeature_RNA)
+```
+
+
+```{r}
+pbmc[["percent.mt"]] <- PercentageFeatureSet(pbmc, pattern = "^MT-")
+pbmc[["percent.rb"]] <- PercentageFeatureSet(pbmc, pattern = "^RP[SL]")
+head(pbmc[[]])
+```
+```{R}
+VlnPlot(pbmc, features = c("nFeature_RNA","nCount_RNA","percent.mt","percent.rb"),ncol = 4,pt.size = 0.1) & 
+  theme(plot.title = element_text(size=10))
+```
+```{r, fig.show="hold", out.width="50%"}
+plot1 <- FeatureScatter(pbmc, feature1 = "nCount_RNA", feature2 = "percent.mt")
+plot2 <- FeatureScatter(pbmc, feature1 = "nCount_RNA", feature2 = "nFeature_RNA")
+plot1 + plot2
+
+
+FeatureScatter(pbmc, feature1 = "nCount_RNA", feature2 = "percent.rb")
+FeatureScatter(pbmc, feature1 = "percent.rb", feature2 = "percent.mt")
+``` 
+
+<span style="color: blue;"> <i>Фильтрация: 
+nFeature_RNA(кол-во генов) больше 200 и меньше 2500(если выше - вероятно это дуплеты), 
+фильтрация по митохондриальному контенту < 15, в соответсвии с предыдущим графиком(VlnPlot)  <i></span>
+ 
+```{r}
+pbmc <- subset(pbmc, subset = nFeature_RNA > 200 & 
+                              nFeature_RNA < 2500 & 
+                              percent.mt < 15)
+
+```
+```{r}
+meta <- pbmc@meta.data
+dim(meta)
+```
+
+<span style="color: blue;"> <i> После фильтрации 7396 клеток <i> </span>
+
+```{r}
+VlnPlot(pbmc, features = c("nFeature_RNA","nCount_RNA","percent.mt","percent.rb"),ncol = 4, pt.size = 0.1) & 
+  theme(plot.title = element_text(size= 10))
+```
+```{r}
+pbmc <- NormalizeData(pbmc)
+pbmc <- FindVariableFeatures(pbmc, selection.method = "vst", nfeatures = 2000)
+top10 <- head(VariableFeatures(pbmc), 10)
+top10 #топ 10 вариабельных генов
+```
+Plot variable features with and without labels:
+```{R}
+plot1 <- VariableFeaturePlot(pbmc)
+LabelPoints(plot = plot1, points = top10, repel = TRUE, xnudge = 0, ynudge = 0)
+```
+```{R}
+
+all.genes <- rownames(pbmc)
+pbmc <- ScaleData(pbmc, features = all.genes)
+```
+
+```{R}
+pbmc <- RunPCA(pbmc, features = VariableFeatures(object = pbmc))
+DimPlot(pbmc, reduction = "pca")
+```
+
+```{r}
+print(pbmc[["pca"]], dims = 1:5, nfeatures = 5) 
+```
+
+```{r}
+VizDimLoadings(pbmc, dims = 1:9, reduction = "pca") & 
+  theme(axis.text=element_text(size=5), axis.title=element_text(size=8,face="bold"))
+```
+```{R}
+# Heatmaps of these genes
+DimHeatmap(pbmc, dims = 1:12, nfeatures = 20, cells = 500, balanced = T)
+```
+
+<span style="color: blue;"> <i> ElbowPlot показывает какое количество принципиальных компонент объясняет вариабельность данных <i> </span>
+
+```{R}
+ElbowPlot(pbmc) 
+```
+```{R}
+pbmc <- FindNeighbors(pbmc, dims = 1:10) #ищем соседей по кластеру
+pbmc <- FindClusters(pbmc, resolution = 0.4) # Resolution may vary ~0.4-1.2, depending on how well (biologically) it describes clusters
+pbmc <- RunUMAP(pbmc, dims = 1:10, verbose = F)
+```
+```{R}
+head(Idents(pbmc), 5)
+```
+<span style="color: blue;"> <i> Кластеры и количество клеток в каждом кластере <i> </span>
+
+```{r}
+table(pbmc@meta.data$seurat_clusters)
+```
+```{R}
+DimPlot(pbmc,label.size = 4,repel = T,label = T)
+```
+
+```{r}
+FeaturePlot(pbmc, features = c("S100A9", "IGLC1", "IGHM", "PF4"))
+```
+```{R, fig.show="hold", out.width="50%"}
+# QC check
+FeaturePlot(pbmc, features = "percent.mt") & theme(plot.title = element_text(size=10))
+FeaturePlot(pbmc, features = "percent.rb") & theme(plot.title = element_text(size=10))
+FeaturePlot(pbmc, features = "nFeature_RNA") & theme(plot.title = element_text(size=10))
+FeaturePlot(pbmc, features = "nCount_RNA") & theme(plot.title = element_text(size=10))
+```
+<span style="color: blue;"> <i> Гены клеточного цикла: <i> </span>
+
+```{R}
+cc.genes.updated.2019
+s.genes <- cc.genes.updated.2019$s.genes
+g2m.genes <- cc.genes.updated.2019$g2m.genes
+```
+
+```{R}
+pbmc <- CellCycleScoring(pbmc, s.features = s.genes, g2m.features = g2m.genes)
+table(pbmc[[]]$Phase)
+```
+```{R, fig.show="hold", out.width="50%"}
+DimPlot(pbmc, group.by = "Phase") 
+DimPlot(pbmc, split.by = "Phase")
+```
+```{r}
+FeaturePlot(pbmc,features = c("S.Score","G2M.Score"),label.size = 4,repel = T,label = T) & 
+  theme(plot.title = element_text(size=10))
+```
+
+```{r}
+VlnPlot(pbmc,features = c("S.Score","G2M.Score")) & 
+  theme(plot.title = element_text(size=10)) 
+```
+
+<span style="color: blue;"> <i><bold> ПОИСК ГЕНОВ-МАРКЕРОВ ДЛЯ КЛАСТЕРОВ<bold><i> </span>
+
+```{r}
+cluster2.markers <- FindMarkers(pbmc, ident.1 = 2, min.pct = 0.25)
+head(cluster2.markers, n = 5)
+```
+
+<span style="color: blue;"> <i> Второй кластер вероятно принадлежит T-лимфоцитам <i> </span>
+
+![](/home/nastasista/Desktop/t-cells.png)
+
+<span style="color: blue;"> <i> Топ 2 гена-маркера для каждого из кластеров: <i> </span>
+```{r}
+pbmc.markers <- FindAllMarkers(pbmc, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25)
+pbmc.markers %>%
+  group_by(cluster) %>%
+  slice_max(n = 2, order_by = avg_log2FC)
+```
+ <span style="color: blue;"> <i> Кластер 0 <i> </span>
+ 
+ ![](/home/nastasista/Desktop/ES.png)
+
+```{R, fig.show="hold", out.width="50%"}
+
+FeaturePlot(pbmc, features = c("IL6ST", "FHIT")) #cluster 0 - Endothelial cells 
+VlnPlot(pbmc, features = c("IL6ST", "FHIT"))
+```
+<span style="color: blue;"> <i> Кластер 1 <i> </span>
+
+![](/home/nastasista/Desktop/n.png)
+
+```{R, fig.show="hold", out.width="50%"}
+FeaturePlot(pbmc, features = c("TSHZ2", "BRWD1")) #cluster 1 - Neurons ???
+VlnPlot(pbmc, features = c("TSHZ2", "BRWD1"))
+```
+<span style="color: blue;"> <i> Кластеры 2, 3, 5, 9 <i> </span>
+
+```{R, fig.show="hold", out.width="50%"}
+FeaturePlot(pbmc, features = c("LINC02446", "CD8B")) #cluster 2 - T-cells
+FeaturePlot(pbmc, features = c("GZMH",	"TRDC")) #cluster 3 - Gamma delta T + NK cells
+FeaturePlot(pbmc, features = c("IGKC", "IGHM")) #cluster 5 - B-cells
+FeaturePlot(pbmc, features = c("CDKN1C", "LYPD2")) #cluster 9 - Fibroblasts + EC
+```
+
+```{r}
+
+pbmc.markers %>%
+  group_by(cluster) %>%
+  top_n(n = 10, wt = avg_log2FC) -> top10
+DoHeatmap(pbmc, features = top10$gene) + NoLegend()
+
+```
+
+
+
+```{r}
+new.cluster.ids <- c("Endothelial cells", "Neurons", "T-cells", "Gamma delta T + NK cells", "Cluster 4", "B-cells", "Cluster 6", "Cluster 7", "Cluster 8", "Fibroblasts + EC", "Cluster 10")
+names(new.cluster.ids) <- levels(pbmc)
+pbmc <- RenameIdents(pbmc, new.cluster.ids)
+DimPlot(pbmc, reduction = "umap", label = TRUE, pt.size = 0.5) + NoLegend()
+```
+
+
+<span style="color: blue;"> <i>  <bold> Cell type annotation using SingleR <bold><i> </span>
+
+```{r, include=FALSE}
+library(celldex)
+library(SingleR)
+```
+
+```{r}
+monaco.ref <- celldex::MonacoImmuneData()
+sce <- as.SingleCellExperiment(DietSeurat(pbmc))
+monaco.main <- SingleR(test = sce,assay.type.test = 1,ref = monaco.ref,labels = monaco.ref$label.main)
+monaco.fine <- SingleR(test = sce,assay.type.test = 1,ref = monaco.ref,labels = monaco.ref$label.fine)
+table(monaco.main$pruned.labels)
+pbmc@meta.data$monaco.main <- monaco.main$pruned.labels
+pbmc@meta.data$monaco.fine <- monaco.fine$pruned.labels
+pbmc <- SetIdent(pbmc, value = "monaco.main")
+DimPlot(pbmc, label = T , repel = T, label.size = 3) + NoLegend()
+```
+
+
+
+
