@@ -1,0 +1,186 @@
+---
+title: "compar_deseq_edger_Limma"
+output:
+  word_document: default
+  pdf_document: default
+  html_document: default
+date: "2023-04-08"
+---
+
+```{r setup, include = FALSE}
+require("knitr")
+opts_knit$set(include = FALSE)
+opts_knit$set(highlight = TRUE)
+opts_knit$set(root.dir = "/home/nastasista/mus_2/sort")                      
+```                      
+
+
+```{R, include = FALSE}                  
+
+library(rmarkdown)
+library(DESeq2)
+library(dplyr) 
+library(ggplot2)
+library(vsn)
+library(tibble)
+library(gprofiler2)
+library("org.Mm.eg.db")
+library("AnnotationDbi")
+library(limma)
+library(ggplot2)
+library(pheatmap)
+library(vsn)
+library(tibble)
+library(gprofiler2)
+library(edgeR)
+library(limma)
+library(biomaRt)
+library(pheatmap)
+library(statmod)
+```
+
+
+
+```{r}
+
+countData <- read.table("featCounts_out.txt", header=TRUE, row.names=1)
+countData <- countData[, 6:11]  # Use numeric indices instead of c(6:11)
+colData <- read.table("colData", header=TRUE, row.names=1)
+colnames(countData) <- rownames(colData)
+group <- factor(colData$condition, levels=c("WT", "KO"))
+```
+
+```{r}
+dds <- DESeqDataSetFromMatrix(countData,DataFrame(group), design = ~group)
+dds
+dds <- DESeq(dds)
+
+res_DESeq2 <- data.frame(results(dds))
+head(res_DESeq2)
+
+
+res_DESeq2$sig = as.factor(ifelse(res_DESeq2$padj<0.05&abs(res_DESeq2$log2FoldChange) > 1,
+ifelse(res_DESeq2$log2FoldChange > 1 ,'up','down'),'not'))
+summary(res_DESeq2$sig)
+
+```
+```{r}
+#vst <- varianceStabilizingTransformation(dds)
+Counts <- counts(dds)
+pca <- prcomp(t(Counts))
+pcs <- as.data.frame(pca$x)
+pcs$condition <- colData$condition
+
+# Create PCA plot
+ggplot(pcs, aes(x = PC1, y = PC2, color = condition)) +
+  geom_point(size = 3) +
+  geom_text(aes(label = rownames(pcs)), hjust = 0, vjust = 0) +  
+  xlab(paste0("PC1 (", round(pca$sdev[1] / sum(pca$sdev) * 100, 1), "%)")) +
+  ylab(paste0("PC2 (", round(pca$sdev[2] / sum(pca$sdev) * 100, 1), "%)")) +
+  ggtitle("PCA Plot")
+
+# Create dendrogram
+pca_data <- data.frame(Sample = colnames(Counts), pca$x)
+distances <- dist(pca_data[,2:3])
+dend <- hclust(distances, method = "ward.D2")
+
+# Plot dendrogram
+plot(dend, hang = -1, main = "Dendrogram of PCA Results")
+
+
+```
+
+
+
+
+```{r}
+res_DESeq2$Symbol <- mapIds(org.Mm.eg.db, keys = rownames(res_DESeq2), keytype = "ENSEMBL", column = "SYMBOL")
+res_DESeq2 <- na.omit(res_DESeq2)
+write.csv(res_DESeq2, "res_DESeq2.csv")
+res_DESeq2 <- na.omit(res_DESeq2)
+head(res_DESeq2)
+
+```
+```{r}
+sortedRes <- res_DESeq2[order(abs(res_DESeq2$log2FoldChange), decreasing = TRUE), ]
+top2000_DESeq2 <- head(sortedRes, n = 2000)
+
+```
+
+
+MAplot 2
+
+```{R, include = TRUE}
+ggplot(res_DESeq2, aes(x = log10(baseMean), y = log2FoldChange, color = sig)) + geom_point()
+```
+
+volcano plots:
+
+<font color = red> <i> 
+
+```{R, include = TRUE}
+ggplot(res_DESeq2, aes(x = log2FoldChange, y = -log10(padj), color = sig)) +
+  geom_point()+
+  labs(title = "Volkano plot \n DESeq2")
+
+
+```
+
+<font color=“blue”> <i> Pheatmap
+```{r}
+
+```
+
+
+
+
+```{r}
+signi <- subset(res_DESeq2, padj <= 0.05)
+allSig <- merge(Counts, signi, by = 0)
+sigCounts <- allSig[, 2:7]
+row.names(sigCounts) <- allSig$Symbol
+
+topGenes_deseq <- head(rownames(sigCounts)[order(rowMeans(sigCounts), decreasing = TRUE)], 50)
+topSigCounts <- sigCounts[topGenes_deseq, ]
+
+pheatmap_deseq <- pheatmap(log2(topSigCounts + 1), scale = "row", angle_col = 45, fontsize_row = 7)
+
+ggsave("heatmap_deseq.png", heatmap, dpi = 300, width = 10, height = 6, units = "in")
+
+```
+
+
+
+```{r}
+
+design <-model.matrix(~group)
+rownames(design) = colnames(countData)
+```
+
+```{r}
+dge <- DGEList(counts=countData)
+
+dge <- calcNormFactors(dge, method = "TMM")
+
+dge <- estimateDisp(dge, design, robust = T)
+
+fit <- glmQLFit(dge, design)
+
+fit <- glmQLFTest(fit)
+
+res_edgeR=as.data.frame(topTags(fit, n=Inf))
+head(res_edgeR)
+
+res_edgeR$sig = as.factor(ifelse(res_edgeR$FDR < 0.05 & abs(res_edgeR$logFC)> 1,
+ifelse(res_edgeR$logFC > 1 ,'up','down'),'not'))
+summary(res_edgeR$sig)
+
+write.csv(res_edgeR, file = 'res_edgeR.csv')
+
+```
+
+
+
+
+
+
