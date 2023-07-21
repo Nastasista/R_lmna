@@ -1,0 +1,113 @@
+---
+title: "Edger_pr"
+author: "Анастасия_Полузёрова"
+date: "2023-05-10"
+output:
+  word_document: default
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include = FALSE}
+require("knitr")
+opts_knit$set(include = FALSE)
+opts_knit$set(highlight = TRUE)
+opts_knit$set(root.dir = "/home/nastasista/mus_2/sort")                     
+```                      
+
+```{r}
+
+library(edgeR)
+library(limma)
+library(biomaRt)
+library(pheatmap)
+library(statmod)
+library("AnnotationDbi")
+library("org.Mm.eg.db")
+
+```
+```{r}
+countData <- read.table("featCounts_out.txt", header=TRUE, row.names=1)
+countData <- countData[, 6:11]  
+colData <- read.table("colData", header=TRUE, row.names=1)
+colnames(countData) <- rownames(colData)
+group <- factor(colData$condition, levels=c("WT", "KO"))
+design <-model.matrix(~group)
+rownames(design) = colnames(countData)
+```
+
+```{r}
+dge <- DGEList(counts=countData)
+
+dge <- calcNormFactors(dge, method = "TMM")
+
+dge <- estimateDisp(dge, design, robust = T)
+
+fit <- glmQLFit(dge, design)
+
+fit <- glmQLFTest(fit)
+
+res_edgeR=as.data.frame(topTags(fit, n=Inf))
+head(res_edgeR)
+
+res_edgeR$sig = as.factor(ifelse(res_edgeR$FDR < 0.05 & abs(res_edgeR$logFC)> 1,
+ifelse(res_edgeR$logFC > 1 ,'up','down'),'not'))
+summary(res_edgeR$sig)
+
+write.csv(res_edgeR, file = 'res_edgeR.csv')
+
+
+# # Estimate dispersions
+# dgeComDisp <- estimateGLMCommonDisp(dge, design, verbose = TRUE)
+# dgeTrendDisp <- estimateGLMTrendedDisp(dgeComDisp, design)
+# dgeTagDisp <- estimateGLMTagwiseDisp(dgeTrendDisp, design)
+# 
+# # Plot BCV
+# plotBCV(dgeTagDisp)
+```
+
+```{r}
+
+```
+
+```{r}
+# Add gene names to the result table
+res_edgeR$Symbol <- mapIds(org.Mm.eg.db, keys = rownames(res_edgeR), keytype = "ENSEMBL", column = "SYMBOL")
+res_edgeR <- na.omit(res_edgeR)
+
+write.csv(res_edgeR, "res_edgeR.csv")
+
+head(res_edgeR)
+```
+
+
+
+```{r}
+library(ggplot2)
+
+# Plot Volcano plot
+ggplot(res_edgeR, aes(x = logFC, y = -log10(PValue), color = sig)) +
+  geom_point() +
+  labs(x = "logFC", y = "-log10(PValue)", title = "Volcano Plot")
+
+```
+
+
+
+
+```{r}
+signi <- subset(res_edgeR, FDR < 0.05)
+allSig <- merge(countData, signi, by = 0)
+dup_indices <- which(duplicated(allSig$Symbol))
+allSig$Symbol[dup_indices] <- paste0(allSig$Symbol[dup_indices], "_", dup_indices)
+sigCounts <- allSig[, c(5:7, 2:4)]
+row.names(sigCounts) <- allSig$Symbol
+topGenes_edgeR <- head(rownames(sigCounts)[order(rowMeans(sigCounts), decreasing = TRUE)], 50)
+topSigCounts <- sigCounts[topGenes_edgeR, ]
+pheatmap(log2(topSigCounts + 1), scale = "row", angle_col = 45, fontsize_row = 5)
+```
+
+
+
+
+
