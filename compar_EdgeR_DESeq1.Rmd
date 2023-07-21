@@ -1,0 +1,117 @@
+---
+title: "compar_deseq_edger"
+author: "Анастасия_Полузёрова"
+date: "2023-05-10"
+output:
+  word_document: default
+  html_document: default
+---
+
+```{r setup, include = FALSE}
+require("knitr")
+opts_knit$set(include = FALSE)
+opts_knit$set(highlight = TRUE)
+opts_knit$set(root.dir = "/home/nastasista/mus_2/sort")                      
+```                      
+```{r}
+
+library(tidyverse)
+library (VennDiagram)
+library(grid)
+library(conflicted)
+library(dplyr)
+```
+```{r}
+EdgeR <- read.csv("res_edgeR.csv")
+sortedRes1 <- EdgeR[order(abs(EdgeR$logFC), decreasing = TRUE), ]
+top_EdgeR <- head(sortedRes1, n = 1000)
+
+DESeq2  <- read.csv("res_DESeq2.csv")
+sortedRes <- DESeq2[order(abs(DESeq2$log2FoldChange), decreasing = TRUE), ]
+top_DESeq2 <- head(sortedRes, n = 1000)
+
+Limma <- read.csv("res_limma.csv")
+sortedRes2 <- Limma[order(abs(Limma$logFC), decreasing = TRUE), ]
+top_Limma <- head(sortedRes2, n = 1000)
+
+
+
+top_DESeq2 <- top_DESeq2[ , c(1,3)]
+
+top_EdgeR <- top_EdgeR[, 1:2]
+
+top_Limma <- top_Limma[, 1:2]
+
+
+library(GOplot)
+
+comp <- GOVenn(top_DESeq2, top_EdgeR, top_Limma, label = c("DESeq2", "EdgeR", "Limma"), title = "Comparison of DESeq, EdgeR  and Limma DE Genes", plot = FALSE)
+
+comp$plot
+
+ggsave("venn_plot.png", comp$plot, width = 14, height = 9, units = "in")
+```
+
+```{r, eval = FALSE}
+file_path <- "venn_diagram_up.png"
+
+# Определите размер диаграммы
+png(file = file_path, width = 600, height = 400)
+
+# Определите диаграмму Venn и нарисуйте ее
+grid.newpage()
+
+grid.draw(
+  venn.diagram(
+    list(
+      Limma = rownames(res_limma[res_limma$sig == "up",]),
+      edgeR = rownames(res_edgeR[res_edgeR$sig == "up",]),
+      DESeq2 = rownames(res_DESeq2[res_DESeq2$sig == "up",])
+    ),
+    NULL,
+    height = 3,
+    width = 3,
+    units = "in",
+    col = "black",
+    lwd = 0.3,
+    fill = c("#21d4ec", "#4c91ac", "#4e5178"),
+    alpha = c(0.5, 0.5, 0.5),
+    main = "Up-regulated DEGs"
+  )
+)
+
+# Закройте устройство вывода PNG
+dev.off()
+```
+
+```{r, eval = FALSE}
+
+file_path <- "venn_diagram_down.png"
+
+# Определите размер диаграммы
+png(file = file_path, width = 600, height = 400)
+
+grid.newpage()
+
+grid.draw(
+  venn.diagram(
+    list(
+      Limma = rownames(res_limma[res_limma$sig == "down",]),
+      edgeR = rownames(res_edgeR[res_edgeR$sig == "down",]),
+      DESeq2 = rownames(res_DESeq2[res_DESeq2$sig == "down",])
+    ),
+    NULL,
+    height = 3,
+    width = 3,
+    units = "in",
+    col = "black",
+    lwd = 0.3,
+    fill = c("#21d4ec", "#4c91ac", "#4e5178" ),
+    alpha = c(0.5, 0.5, 0.5),
+    main = "Down-regulated DEGs"
+  )
+)
+
+dev.off()
+```
+
