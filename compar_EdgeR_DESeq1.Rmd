@@ -1,6 +1,6 @@
 ---
-title: "compar_deseq_edger"
-author: "Анастасия_Полузёрова"
+title: "compar_packages"
+author: "Anastasia_Poluzerova"
 date: "2023-05-10"
 output:
   word_document: default
@@ -55,10 +55,8 @@ ggsave("venn_plot.png", comp$plot, width = 14, height = 9, units = "in")
 ```{r, eval = FALSE}
 file_path <- "venn_diagram_up.png"
 
-# Определите размер диаграммы
 png(file = file_path, width = 600, height = 400)
 
-# Определите диаграмму Venn и нарисуйте ее
 grid.newpage()
 
 grid.draw(
@@ -80,7 +78,6 @@ grid.draw(
   )
 )
 
-# Закройте устройство вывода PNG
 dev.off()
 ```
 
@@ -88,7 +85,6 @@ dev.off()
 
 file_path <- "venn_diagram_down.png"
 
-# Определите размер диаграммы
 png(file = file_path, width = 600, height = 400)
 
 grid.newpage()
