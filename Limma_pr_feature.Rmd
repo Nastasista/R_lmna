@@ -1,0 +1,108 @@
+---
+title: "Limma feature_Poluzerova"
+output:
+  word_document: default
+  pdf_document: default
+  html_document: default
+date: "2023-04-08"
+---
+
+```{r setup, include = FALSE}
+require("knitr")
+opts_knit$set(include = FALSE)
+opts_knit$set(highlight = TRUE)
+opts_knit$set(root.dir = "/home/nastasista/mus_2/sort")                      
+```                      
+
+
+```{R, include = FALSE}  
+
+library(limma)
+library(rmarkdown)
+library(dplyr) 
+library(ggplot2)
+library(pheatmap)
+library(vsn)
+library(tibble)
+library(gprofiler2)
+library("org.Mm.eg.db")
+library("AnnotationDbi")
+```
+
+```{r, eval = FALSE}
+
+countData <- read.table("featCounts_out.txt", header=TRUE, row.names=1)
+countData <- countData[, 6:11] 
+colData <- read.table("colData", header=TRUE, row.names=1)
+colnames(countData) <- rownames(colData)
+
+
+keep <- rowSums(cpm(countData) > 1) >= 2
+countData <- countData[keep, , drop=FALSE]  # Keep matrix structure
+
+group <- factor(colData$condition, levels=c("WT", "KO"))
+design <- model.matrix(~ group)
+rownames(design) <- colnames(countData)
+
+dge <- DGEList(counts = countData, group = group) 
+
+dge <- calcNormFactors(dge, method = "TMM")
+
+dge
+```
+```{r, eval = FALSE}
+#Calculate the CPM value
+logdge <- cpm(dge, log=TRUE, prior.count=3)
+fit <- lmFit (logdge, design)
+fit <- eBayes(fit, trend=TRUE)
+res_limma<- as.data.frame(topTable(fit,n=Inf))
+head(res_limma)
+
+res_limma$sig <- as.factor(ifelse(res_limma$adj.P.Val < 0.05 & abs(res_limma$logFC) > 1,
+ifelse(res_limma$logFC > 1 ,'up','down'),'not'))
+summary(res_limma$sig)
+
+res_limma$Symbol <- mapIds(org.Mm.eg.db, keys = rownames(res_limma), keytype = "ENSEMBL", column = "SYMBOL")
+res_limma <- na.omit(res_limma)
+
+
+head(res_limma)
+write.csv(res_limma, file = "res_limma.csv")
+```
+
+
+```{r, eval = FALSE}
+
+ggplot(res_limma, aes(x = logFC, y = -log10(P.Value), color = sig)) +
+  geom_point() +
+  labs(x = "logFC", y = "-log10(PValue)", title = "Volcano Plot")
+```
+
+
+```{r, eval = FALSE}
+
+library(pheatmap)
+
+# Subset significant genes and create count matrix
+signi <- subset(res_limma, adj.P.Val < 0.05)
+allSig <- merge(countData, signi, by = 0)
+dup_indices <- which(duplicated(allSig$Symbol))
+allSig$Symbol[dup_indices] <- paste0(allSig$Symbol[dup_indices], "_", dup_indices)
+sigCounts <- allSig[, c(5:7, 2:4)]
+row.names(sigCounts) <- allSig$Symbol
+
+# Select top 50 genes by mean expression and create heatmap
+topGenes_Limma <- head(rownames(sigCounts)[order(rowMeans(sigCounts), decreasing = TRUE)], 50)
+topSigCounts <- sigCounts[topGenes_Limma, ]
+pheatmap(log2(topSigCounts + 1), scale = "row", angle_col = 45, fontsize_row = 5)
+
+
+```
+
+
+
+
+
+
+
+
